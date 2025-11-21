@@ -13,23 +13,32 @@ import json # For ease of setting up received sends
 clients = []
 
 def handle_client(CONN, ADDR):
-    # Send to clients screen width, height & player paddle, "left or "right
-    for c in clients:
-        if c == clients[1]:
-            c.send(json.dumps({"screenWidth" : 640, "screenHeight" : 480, "pad" : "left"})).encode()
-        if c == clients[2]:
-            c.send(json.dumps({"screenWidth" : 640, "screenHeight" : 480, "pad" : "right"})).encode()
-            
     print(f"[NEW CONNECTION] {ADDR}")
+    # Send to clients screen width, height & player paddle, "left or "right
+    index = clients.index(CONN)
+
+    if index == 0:
+        role = "left"
+    else:
+        role = "right"
+
+    config = {
+        "screenWidth": 640,
+        "screenHeight": 480,
+        "pad": role
+    }
+
+    try:
+        CONN.send(json.dumps(config).encode())
+    except:
+        pass
+
+
     while True:
         try:
-            msg = CONN.recv(1024)
-            if not msg:  # client disconnected
+            text = CONN.recv(1024)
+            if not text:
                 break
-            # broadcast message to everyone except the sender
-            for c in clients:
-                if c != CONN:
-                    c.send(msg)
         except:
             break
         # cleanup after disconnect
@@ -38,13 +47,13 @@ def handle_client(CONN, ADDR):
         clients.remove(CONN)
     print(f"[DISCONNECTED] {ADDR}")
 
-HOST = "0.0.0.0"
-PORT = 12500
+HOST = "127.0.0.1"
+PORT = 65432
 
-pongServer_Socket = socket.socket(socket.AF_INET, socket.DGRAM) # IPv4. UDP as this is intended for a game.
+pongServer_Socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # IPv4. UDP as this is intended for a game.
 pongServer_Socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Allow for instant reuse of addresses after server restart.
 
-pongServer_Socket.bind(HOST, PORT)
+pongServer_Socket.bind((HOST, PORT))
 pongServer_Socket.listen()
 
 while True:
