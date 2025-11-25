@@ -6,14 +6,6 @@
 # Misc:                     <Not Required.  Anything else you might want to include>
 # =================================================================================================
 
-# =================================================================================================
-# Contributing Authors:	    Gunner Kline, Nick Stone, Rebecca Mukeba
-# Email Addresses:          gkl230@uky.edu, 
-# Date:                     <The date the file was last edited>
-# Purpose:                  <How this file contributes to the project>
-# Misc:                     <Not Required.  Anything else you might want to include>
-# =================================================================================================
-
 import socket
 import threading
 import json # For ease of setting up received sends
@@ -62,6 +54,12 @@ while True:
         }
 
         pongServer_Socket.sendto(json.dumps(config).encode(), ADDR)
+        continue
+
+    # Receive Client buffer containing paddle, ball location, and score
+    try:
+        buffers[ADDR] += DATA.decode()
+    except:
         continue
 
 # Use this file to write your server logic
