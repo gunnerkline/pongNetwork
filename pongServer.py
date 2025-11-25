@@ -6,61 +6,63 @@
 # Misc:                     <Not Required.  Anything else you might want to include>
 # =================================================================================================
 
+# =================================================================================================
+# Contributing Authors:	    Gunner Kline, Nick Stone, Rebecca Mukeba
+# Email Addresses:          gkl230@uky.edu, 
+# Date:                     <The date the file was last edited>
+# Purpose:                  <How this file contributes to the project>
+# Misc:                     <Not Required.  Anything else you might want to include>
+# =================================================================================================
+
 import socket
 import threading
 import json # For ease of setting up received sends
 
-clients = []
-
-def handle_client(CONN, ADDR):
-    print(f"[NEW CONNECTION] {ADDR}")
-    # Send to clients screen width, height & player paddle, "left or "right
-    index = clients.index(CONN)
-
-    if index == 0:
-        role = "left"
-    else:
-        role = "right"
-
-    config = {
-        "screenWidth": 640,
-        "screenHeight": 480,
-        "pad": role
-    }
-
-    try:
-        CONN.send(json.dumps(config).encode())
-    except:
-        pass
-
-
-    while True:
-        try:
-            text = CONN.recv(1024)
-            if not text:
-                break
-        except:
-            break
-        # cleanup after disconnect
-    CONN.close()
-    if CONN in clients:
-        clients.remove(CONN)
-    print(f"[DISCONNECTED] {ADDR}")
-
 HOST = "127.0.0.1"
 PORT = 65432
 
-pongServer_Socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # IPv4. UDP as this is intended for a game.
-pongServer_Socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Allow for instant reuse of addresses after server restart.
+pongServer_Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # IPv4. UDP as this is intended for a game.
 
 pongServer_Socket.bind((HOST, PORT))
-pongServer_Socket.listen()
+
+clients = []
+buffers = {}
+global_sync = 0
+
+players = {
+    "left": None,
+    "right": None
+}
 
 while True:
-    CONN, ADDR = pongServer_Socket.accept()
-    clients.append(CONN)
-    thread = threading.Thread(target=handle_client, args=(CONN, ADDR))
-    thread.start()
+    try:
+        DATA, ADDR = pongServer_Socket.recvfrom(4096)
+    except ConnectionResetError:
+        continue
+
+    # Insert a new client in the list and assign a configuration of paddle ownership and screen dimensions.
+    if ADDR not in clients:
+        clients.append(ADDR)
+        buffers[ADDR] = ""
+        print(f"[NEW CONNECTION] {ADDR}")
+
+        index = clients.index(ADDR)
+
+        if players["left"] is None:
+            players["left"] = ADDR
+            pad = "left"
+        elif players["right"] is None:
+            players["right"] = ADDR
+            pad = "right"
+
+        config = {
+        "screenWidth": 640,
+        "screenHeight": 480,
+        "pad": pad
+        }
+
+        pongServer_Socket.sendto(json.dumps(config).encode(), ADDR)
+        continue
 
 # Use this file to write your server logic
 # You will need to support at least two clients

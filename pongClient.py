@@ -179,22 +179,14 @@ def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # Changed SOCK_STREAM to SOCK_DGRAM
 
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
-    port = int(port);
-    print(ip)
-    print(port)
-    client.connect((ip, port))
-    server_info = json.loads(client.recv(1024).decode())
-    screenWidth = server_info["screenWidth"]
-    screenHeight = server_info["screenHeight"]
-    pad         = server_info["pad"]
 
 
     
 
     # If you have messages you'd like to show the user use the errorLabel widget like so
-    errorLabel.config(text=f"Some update text. You input: IP: {ip}, Port: {port}")
+    # errorLabel.config(text=f"Some update text. You input: IP: {ip}, Port: {port}")
     # You may or may not need to call this, depending on how many times you update the label
-    errorLabel.update()     
+    # errorLabel.update()     
 
     # Close this window and start the game with the info passed to you from the server
     app.withdraw()     # Hides the window (we'll kill it later)
