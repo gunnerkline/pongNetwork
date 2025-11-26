@@ -17,7 +17,7 @@ from assets.code.helperCode import *
 # This is the main game loop.  For the most part, you will not need to modify this.  The sections
 # where you should add to the code are marked.  Feel free to change any part of this project
 # to suit your needs.
-def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.socket) -> None:
+def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.socket,pongServer_addr:tuple[str,str]) -> None:
     
     # Pygame inits
     pygame.mixer.pre_init(44100, -16, 2, 2048)
@@ -92,7 +92,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             "currentRightScore" : rScore,
             "sync" : sync
         }
-        client.sendto(json.dumps(config).encode())
+        client.sendto((json.dumps(config) +"\n").encode(),pongServer_addr)
         # =========================================================================================
 
         # Update the player paddle and opponent paddle's location on the screen
@@ -163,7 +163,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # =========================================================================================
         # Send your server update here at the end of the game loop to sync your game with your
         # opponent's game
-        data = client.recvfrom(1024).decode()
+        data,_ = client.recvfrom(1024).decode()
         opconfig = json.loads(data) 
         #check sync value
         if opconfig["sync"] > sync:
