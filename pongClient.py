@@ -1,8 +1,10 @@
-# =================================================================================================
-# Contributing Authors:	    <Anyone who touched the code>
+
+  # =================================================================================================
+# Contributing Authors:	    
 # Email Addresses:          <Your uky.edu email addresses>
 # Date:                     <The date the file was last edited>
-# Purpose:                  <How this file contributes to the project>
+# Purpose:                  Client-side implementation for multiplayer Pong game. Handles connection
+#                          to server, receives game configuration, and manages game state synchronization.
 # Misc:                     <Not Required.  Anything else you might want to include>
 # =================================================================================================
 
@@ -167,27 +169,91 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 # If you want to hard code the screen's dimensions into the code, that's fine, but you will need to know
 # which client is which
 def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
-    # Purpose:      This method is fired when the join button is clicked
-    # Arguments:
-    # ip            A string holding the IP address of the server
-    # port          A string holding the port the server is using
-    # errorLabel    A tk label widget, modify it's text to display messages to the user (example below)
-    # app           The tk window object, needed to kill the window
+    # Author:       
+    # Purpose:      Connect to the Pong game server, send initial connection packet, and receive
+    #               configuration information (screen dimensions and paddle assignment) from the server.
+    # Pre:          The server must be running and accessible at the provided IP and port.
+    #               The errorLabel widget must be initialized and visible in the tkinter window.
+    # Post:         A UDP socket is created and connected to the server. The client receives a JSON
+    #               configuration containing screenWidth, screenHeight, and pad (paddle assignment).
+    #               The game window is closed and playGame() is called with the received configuration.
     
-    # Create a socket and connect to the server
-    # You don't have to use SOCK_STREAM, use what you think is best
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # Changed SOCK_STREAM to SOCK_DGRAM
-
-    # Get the required information from your server (screen width, height & player paddle, "left or "right)
-
-
+    try:
+        # Convert port string to integer
+        port_num = int(port)
+    except ValueError:
+        errorLabel.config(text="Error: Invalid port number. Please enter a valid port.")
+        errorLabel.update()
+        return
     
-
-    # If you have messages you'd like to show the user use the errorLabel widget like so
-    # errorLabel.config(text=f"Some update text. You input: IP: {ip}, Port: {port}")
-    # You may or may not need to call this, depending on how many times you update the label
-    # errorLabel.update()     
-
+    # Create a UDP socket to match the server's UDP implementation
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    
+    # Set socket timeout for receiving response
+    client.settimeout(5.0)
+    
+    try:
+        # Send an initial packet to the server to establish connection
+        # The server will detect this as a new client and send back configuration
+        connection_request = json.dumps({"type": "connect"}).encode()
+        client.sendto(connection_request, (ip, port_num))
+        
+        # Update UI to show connection attempt
+        errorLabel.config(text=f"Connecting to {ip}:{port_num}...")
+        errorLabel.update()
+        
+        # Receive configuration from server
+        # The server sends: {"screenWidth": 640, "screenHeight": 480, "pad": "left" or "right"}
+        data, server_addr = client.recvfrom(4096)
+        
+        # Parse the JSON configuration received from server
+        config = json.loads(data.decode())
+        
+        # Extract configuration values
+        screenWidth = config.get("screenWidth", 640)
+        screenHeight = config.get("screenHeight", 480)
+        pad = config.get("pad", "left")
+        
+        # Validate received configuration
+        if pad not in ["left", "right"]:
+            errorLabel.config(text="Error: Invalid paddle assignment from server.")
+            errorLabel.update()
+            client.close()
+            return
+        
+        # Update UI to show successful connection
+        errorLabel.config(text=f"Connected! Assigned as {pad} player.")
+        errorLabel.update()
+        
+        # Small delay to show success message
+        app.after(500, lambda: None)
+        
+    except socket.timeout:
+        errorLabel.config(text="Error: Connection timeout. Server may be unreachable.")
+        errorLabel.update()
+        client.close()
+        return
+    except socket.gaierror:
+        errorLabel.config(text="Error: Invalid IP address. Please check and try again.")
+        errorLabel.update()
+        client.close()
+        return
+    except ConnectionRefusedError:
+        errorLabel.config(text="Error: Connection refused. Server may not be running.")
+        errorLabel.update()
+        client.close()
+        return
+    except json.JSONDecodeError:
+        errorLabel.config(text="Error: Invalid response from server.")
+        errorLabel.update()
+        client.close()
+        return
+    except Exception as e:
+        errorLabel.config(text=f"Error: {str(e)}")
+        errorLabel.update()
+        client.close()
+        return
+    
     # Close this window and start the game with the info passed to you from the server
     app.withdraw()     # Hides the window (we'll kill it later)
     playGame(screenWidth, screenHeight, pad, client)  # User will be either left or right paddle
