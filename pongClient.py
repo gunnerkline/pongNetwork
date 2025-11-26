@@ -84,8 +84,15 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # Your code here to send an update to the server on your paddle's information,
         # where the ball is and the current score.
         # Feel free to change when the score is updated to suit your needs/requirements
-        
-        
+
+        config = {
+            "paddleCoords" : playerPaddleObj.rect.topleft,
+            "ballCoords" : ball.rect.topleft,
+            "currentLeftScore" : lScore,
+            "currentRightScore" : rScore,
+            "sync" : sync
+        }
+        client.send(json.dumps(config).encode())
         # =========================================================================================
 
         # Update the player paddle and opponent paddle's location on the screen
@@ -156,7 +163,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # =========================================================================================
         # Send your server update here at the end of the game loop to sync your game with your
         # opponent's game
-
+        
         # =========================================================================================
 
 
