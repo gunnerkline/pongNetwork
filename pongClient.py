@@ -92,7 +92,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             "currentRightScore" : rScore,
             "sync" : sync
         }
-        client.send(json.dumps(config).encode())
+        client.sendto(json.dumps(config).encode())
         # =========================================================================================
 
         # Update the player paddle and opponent paddle's location on the screen
@@ -153,7 +153,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         pygame.draw.rect(screen, WHITE, topWall)
         pygame.draw.rect(screen, WHITE, bottomWall)
         scoreRect = updateScore(lScore, rScore, screen, WHITE, scoreFont)
-        pygame.display.update([topWall, bottomWall, ball, leftPaddle, rightPaddle, scoreRect, winMessage])
+        pygame.display.update()
         clock.tick(60)
         
         # This number should be synchronized between you and your opponent.  If your number is larger
@@ -163,7 +163,17 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # =========================================================================================
         # Send your server update here at the end of the game loop to sync your game with your
         # opponent's game
-        
+        data = client.recvfrom(1024).decode()
+        opconfig = json.loads(data) 
+        #check sync value
+        if opconfig["sync"] > sync:
+            #if opponent is ahead then use their game state config
+            ball.rect.topleft = opconfig["ballCoords"]
+            lScore = opconfig["currentLeftScore"]
+            rScore = opconfig["currentRightScore"]
+            sync = opconfig["sync"]
+        #update opponent paddle    
+        opponentPaddleObj.rect.topleft = opconfig["paddleCoords"]
         # =========================================================================================
 
 
