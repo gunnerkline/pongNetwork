@@ -62,6 +62,55 @@ while True:
     except:
         continue
 
+    while "\n" in buffers[ADDR]:
+        msg, buffers[ADDR] = buffers[ADDR].split("\n", 1)
+        msg = msg.strip()
+        if not msg:
+            continue
+
+        try:
+            clientConfig = json.loads(msg)
+
+            global_sync += 1
+            clientConfig["sync"] = global_sync
+        except:
+            continue
+
+        # In order for Authorative to work
+        if "disconnect" in clientConfig:
+            print(f"[DISCONNECT FROM] {ADDR}")
+
+            if ADDR == players["left"]:
+                players["left"] = None
+            elif ADDR == players["right"]:
+                players["right"] = None
+
+            if ADDR in clients:
+                clients.remove(ADDR)
+
+        # Determine opponent explicitly
+        # The first player to connect is considered "Authoritative," and sends its ball location and score to all other clients.
+        if ADDR == players["left"]:
+            otherClient = players["right"]
+        elif ADDR == players["right"]:
+            otherClient = players["left"]
+            clientConfig.pop("ballCoords", None)
+            clientConfig.pop("currentLeftScore", None)
+            clientConfig.pop("currentRightScore", None)
+        else:
+            clientConfig.pop("ballCoords", None)
+            clientConfig.pop("currentLeftScore", None)
+            clientConfig.pop("currentRightScore", None)
+            continue  # spectators ignored
+
+        if otherClient is None:
+            continue  # opponent not connected yet
+
+        pongServer_Socket.sendto(
+            (json.dumps(clientConfig) + "\n").encode(),
+            otherClient
+        )
+
 # Use this file to write your server logic
 # You will need to support at least two clients
 # You will need to keep track of where on the screen (x,y coordinates) each paddle is, the score 
