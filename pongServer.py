@@ -1,24 +1,26 @@
 # =================================================================================================
-# Contributing Authors:	    Gunner Kline, Nick Stone, Rebecca Mukeba
+# Contributing Authors:	    Gunner Kline
 # Email Addresses:          gkl230@uky.edu, 
-# Date:                     <The date the file was last edited>
-# Purpose:                  <How this file contributes to the project>
-# Misc:                     <Not Required.  Anything else you might want to include>
+# Date:                     11/26/2025
+# Purpose:                  Handle receiving and sending of crucial data i.e. paddle and ball locations across multiple clients. Discern between players and spectators.
+# Misc:                     
 # =================================================================================================
 
 import socket
-import threading
-import json # For ease of setting up received sends
+import json
 
 HOST = "127.0.0.1"
-PORT = 65432
+PORT = 62222
 
 pongServer_Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # IPv4. UDP as this is intended for a game.
 
 pongServer_Socket.bind((HOST, PORT))
 
 clients = []
+spectators = []
 buffers = {}
+
+
 global_sync = 0
 
 players = {
@@ -46,6 +48,9 @@ while True:
         elif players["right"] is None:
             players["right"] = ADDR
             pad = "right"
+        else:
+            spectators.append(ADDR)
+            pad = "spectator"
 
         config = {
         "screenWidth": 640,
@@ -70,46 +75,46 @@ while True:
 
         try:
             clientConfig = json.loads(msg)
-
-            global_sync += 1
-            clientConfig["sync"] = global_sync
-        except:
+        except json.JSONDecodeError:
             continue
 
-        # In order for Authorative to work
+        # ---- Disconnect handling ----
         if "disconnect" in clientConfig:
             print(f"[DISCONNECT FROM] {ADDR}")
 
-            if ADDR == players["left"]:
-                players["left"] = None
-            elif ADDR == players["right"]:
-                players["right"] = None
+            for key in ["left", "right"]:
+                if players[key] == ADDR:
+                    players[key] = None
 
+            if ADDR in spectators:
+                spectators.remove(ADDR) if ADDR in spectators else None
             if ADDR in clients:
                 clients.remove(ADDR)
+            if ADDR in buffers:
+                del buffers[ADDR]
 
-        # Determine opponent explicitly
+            # skip sending to other clients
+            break  # exit the while "\n" loop
+
+        # Determine opponent and spectators
         # The first player to connect is considered "Authoritative," and sends its ball location and score to all other clients.
+
+        recipients = []
         if ADDR == players["left"]:
-            otherClient = players["right"]
+            if players["right"]:
+                recipients.append(players["right"])
         elif ADDR == players["right"]:
-            otherClient = players["left"]
-            clientConfig.pop("ballCoords", None)
-            clientConfig.pop("currentLeftScore", None)
-            clientConfig.pop("currentRightScore", None)
-        else:
-            clientConfig.pop("ballCoords", None)
-            clientConfig.pop("currentLeftScore", None)
-            clientConfig.pop("currentRightScore", None)
-            continue  # spectators ignored
+            if players["left"]:
+                recipients.append(players["left"])
 
-        if otherClient is None:
-            continue  # opponent not connected yet
+                clientConfig.pop("ballCoords", None)
+                clientConfig.pop("currentLeftScore", None)
+                clientConfig.pop("currentRightScore", None)
 
-        pongServer_Socket.sendto(
-            (json.dumps(clientConfig) + "\n").encode(),
-            otherClient
-        )
+        recipients.extend(spectators)
+
+        for r in recipients:
+            pongServer_Socket.sendto((json.dumps(clientConfig) + "\n").encode(), r)
 
 # Use this file to write your server logic
 # You will need to support at least two clients

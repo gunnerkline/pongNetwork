@@ -11,6 +11,7 @@ import tkinter as tk
 import sys
 import socket
 import json # For ease of setting up received sends
+import random # Solely for randomized music playlist
 
 from assets.code.helperCode import *
 
@@ -29,7 +30,19 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
     scoreFont = pygame.font.Font("./assets/fonts/pong-score.ttf", 32)
     winFont = pygame.font.Font("./assets/fonts/visitor.ttf", 48)
     pointSound = pygame.mixer.Sound("./assets/sounds/point.wav")
+    pointSound.set_volume(0.3)
+
     bounceSound = pygame.mixer.Sound("./assets/sounds/bounce.wav")
+
+    # Music by Gunner Kline
+    pongMusic1 = pygame.mixer.Sound("./assets/sounds/pongMusic1.mp3")
+    pongMusic2 = pygame.mixer.Sound("./assets/sounds/pongMusic2.mp3")
+
+    pongTrack = {
+        pongMusic1,
+        pongMusic2
+        }
+
 
     # Display objects
     screen = pygame.display.set_mode((screenWidth, screenHeight))
@@ -65,8 +78,14 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
     rScore = 0
 
     sync = 0
+    last_received_sync = -1
     recv_buffer = ""
     client.setblocking(False)
+    gameOver = False
+
+    # Play music
+    pongSong = random.choice(list(pongTrack))
+    pongSong.play(loops=-1)
 
     while True:
         # Wiping the screen
@@ -84,12 +103,26 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 
                 pygame.quit()
                 sys.exit()
-            elif event.type == pygame.KEYDOWN and playerPaddleObj:
-                if event.key == pygame.K_DOWN:
-                    playerPaddleObj.moving = "down"
+            elif event.type == pygame.KEYDOWN:
+                if playerPaddleObj:
+                    if event.key == pygame.K_DOWN:
+                        playerPaddleObj.moving = "down"
 
-                elif event.key == pygame.K_UP:
-                    playerPaddleObj.moving = "up"
+                    elif event.key == pygame.K_UP:
+                        playerPaddleObj.moving = "up"
+
+                    elif event.key == pygame.K_r and gameOver:
+                        gameOver = False
+                        lScore = 0
+                        rScore = 0
+
+                if event.key == pygame.K_q:
+                    try:
+                        client.sendto(b'{"disconnect": true}\n', pongServer_addr)
+                    except:
+                        pass
+                    pygame.quit()
+                    sys.exit()
 
             elif event.type == pygame.KEYUP and playerPaddleObj:
                 playerPaddleObj.moving = ""
@@ -103,7 +136,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             config = {
                 "padID"             : playerPaddle,
                 "paddleCoords"      : playerPaddleObj.rect.topleft if playerPaddleObj else "NoPaddle",
-                "ballCoords"        : ball.rect.topleft,
+                "ballCoords"        : ball.rect.topleft if playerPaddleObj else None,
                 "currentLeftScore"  : lScore,
                 "currentRightScore" : rScore,
                 "sync"              : sync
@@ -132,12 +165,29 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                 pygame.draw.rect(screen, WHITE, paddle)
 
         # If the game is over, display the win message
-        if lScore > 15 or rScore > 15:
-            winText = "Player 1 Wins! " if lScore > 15 else "Player 2 Wins! "
+        if lScore > 4 or rScore > 4:
+            winText = "Player 1 Wins! " if lScore > 4 else "Player 2 Wins! "
             textSurface = winFont.render(winText, False, WHITE, (0,0,0))
             textRect = textSurface.get_rect()
             textRect.center = ((screenWidth/2), screenHeight/2)
             winMessage = screen.blit(textSurface, textRect)
+
+            playAgainLines = [
+                "Play Again?",
+                "R to retry",
+                "Q to quit"
+            ]
+
+            line_height = winFont.get_linesize()  # Gives the height of one line
+
+            for i, line in enumerate(playAgainLines):
+                paTextSurface = winFont.render(line, False, WHITE)
+                paTextRect = paTextSurface.get_rect()
+                # Center horizontally, offset vertically per line
+                paTextRect.center = (screenWidth/2, 3*screenHeight/4 + i*line_height)
+                screen.blit(paTextSurface, paTextRect)
+
+            gameOver = True
         else:
 
             # ==== Ball Logic =====================================================================
@@ -169,29 +219,6 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             
                 pygame.draw.rect(screen, WHITE, ball)
             else:
-                ball.updatePos()
-
-                # If the ball makes it past the edge of the screen, update score, etc.
-                if ball.rect.x > screenWidth:
-                    lScore += 1
-                    pointSound.play()
-                    ball.reset(nowGoing="left")
-                elif ball.rect.x < 0:
-                    rScore += 1
-                    pointSound.play()
-                    ball.reset(nowGoing="right")
-
-                # Use leftPaddle and rightPaddle for collisions even for spectators
-                for paddle in [leftPaddle, rightPaddle]:
-                    if ball.rect.colliderect(paddle.rect):
-                        bounceSound.play()
-                        ball.hitPaddle(paddle.rect.center[1])
-
-                # Ball vs walls
-                if ball.rect.colliderect(topWall) or ball.rect.colliderect(bottomWall):
-                    bounceSound.play()
-                    ball.hitWall()
-
                 pygame.draw.rect(screen, WHITE, ball)
             # ==== End Ball Logic =================================================================
 
@@ -209,6 +236,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         scoreRect = updateScore(lScore, rScore, screen, WHITE, scoreFont)
         pygame.display.update()
         clock.tick(60)
+
         
         # This number should be synchronized between you and your opponent.  If your number is larger
         # then you are ahead of them in time, if theirs is larger, they are ahead of you, and you need to
@@ -218,57 +246,65 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # Send your server update here at the end of the game loop to sync your game with your
         # opponent's game
 
-        latest_data = None
-
+        # Inside the receive section
+        latest_msg = None
         while True:
             try:
-                data,_ = client.recvfrom(4096)
-                if not data:
+                packet, _ = client.recvfrom(4096)
+                if not packet:
                     break
-                recv_buffer += data.decode()
+                recv_buffer += packet.decode()
             except BlockingIOError:
                 break
             except ConnectionResetError:
+                print("Server Disconnect")
                 return
 
-        # receiving loop
         if "\n" in recv_buffer:
             parts = recv_buffer.split("\n")
-            recv_buffer = parts.pop()
-
+            recv_buffer = parts.pop()  # leftover partial message
             for p in parts:
                 p = p.strip()
-                if not p:
-                    continue
-                try:
-                    opconfig = json.loads(p)
-                except json.JSONDecodeError:
-                    continue
+                if p:
+                    latest_msg = p
 
-                # Ball update
-                if "ballCoords" in opconfig:
-                    ball.rect.topleft = opconfig["ballCoords"]
+        if latest_msg:
+            try:
+                opconfig = json.loads(latest_msg)
+            except json.JSONDecodeError:
+                latest_msg = None
+            else:
+                # Only accept newer syncs
+                incoming_sync = opconfig.get("sync", -1)
+                if incoming_sync > last_received_sync:
+                    last_received_sync = incoming_sync
 
-                # Score update
-                if "currentLeftScore" in opconfig:
-                    lScore = opconfig["currentLeftScore"]
-                if "currentRightScore" in opconfig:
-                    rScore = opconfig["currentRightScore"]
+                        # Ball update
+                    if "ballCoords" in opconfig:
+                        ball.rect.topleft = opconfig["ballCoords"]
 
-                # Paddle update
-                if "paddleCoords" in opconfig and "padID" in opconfig:
-                    padAssigned = opconfig["padID"]
+                    # Score update
+                    if "currentLeftScore" in opconfig:
+                        lScore = opconfig["currentLeftScore"]
+                    if "currentRightScore" in opconfig:
+                        rScore = opconfig["currentRightScore"]
 
-                    # If this pad is NOT your own, update the opponent
-                    if playerPaddle != "spectator":
-                        if padAssigned != playerPaddle:
-                            opponentPaddleObj.rect.topleft = opconfig["paddleCoords"]
-                    else:
-                        # spectator updates both
-                        if padAssigned == "left":
-                            leftPaddle.rect.topleft = opconfig["paddleCoords"]
-                        elif padAssigned == "right":
-                            rightPaddle.rect.topleft = opconfig["paddleCoords"]
+                    # Paddle update
+                    if "paddleCoords" in opconfig and "padID" in opconfig:
+                        padAssigned = opconfig["padID"]
+
+                        # If this pad is NOT your own, update the opponent
+                        if playerPaddle != "spectator":
+                            if padAssigned != playerPaddle:
+                                opponentPaddleObj.rect.topleft = opconfig["paddleCoords"]
+                        else:
+                            # spectator updates both
+                            if padAssigned == "left":
+                                leftPaddle.rect.topleft = opconfig["paddleCoords"]
+                            elif padAssigned == "right":
+                                rightPaddle.rect.topleft = opconfig["paddleCoords"]
+
+                print(f"Local sync: {sync}, Last received sync: {last_received_sync}")
 
         # =========================================================================================
 
@@ -291,8 +327,60 @@ def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
     # You don't have to use SOCK_STREAM, use what you think is best
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # Changed SOCK_STREAM to SOCK_DGRAM
 
-    # Get the required information from your server (screen width, height & player paddle, "left or "right)
+    client.settimeout(5.0)
 
+    # Get the required information from your server (screen width, height & player paddle, "left or "right)
+    port = int(port);
+    pongServer_addr = (ip, port)
+
+    screenWidth = None
+    screenHeight = None
+    pad = None
+
+    print("Connecting to:", pongServer_addr)
+    try:
+        client.sendto(json.dumps({"join": True}).encode(), pongServer_addr)
+        # receive initial config
+        data, _ = client.recvfrom(4096)
+        server_info = json.loads(data.decode())
+        screenWidth = server_info["screenWidth"]
+        screenHeight = server_info["screenHeight"]
+        pad         = server_info["pad"]
+    except socket.timeout:
+        errorLabel.config(text="Error: Connection timeout. Server may be unreachable.")
+        errorLabel.update()
+        client.close()
+        return
+    except socket.gaierror:
+        errorLabel.config(text="Error: Invalid IP address. Please check and try again.")
+        errorLabel.update()
+        client.close()
+        return
+    except ConnectionRefusedError:
+        errorLabel.config(text="Error: Connection refused. Server may not be running.")
+        errorLabel.update()
+        client.close()
+        return
+    except json.JSONDecodeError:
+        errorLabel.config(text="Error: Invalid response from server.")
+        errorLabel.update()
+        client.close()
+        return
+    except Exception as e:
+        errorLabel.config(text=f"Error: {str(e)}")
+        errorLabel.update()
+        client.close()
+        return
+
+    if pad not in ["left", "right", "spectator"]:
+            errorLabel.config(text="Error: Invalid paddle assignment from server.")
+            errorLabel.update()
+            client.close()
+            return
+    if screenWidth == None or screenHeight == None:
+            errorLabel.config(text="Error: Invalid screen dimension assignment from server.")
+            errorLabel.update()
+            client.close()
     
 
     # If you have messages you'd like to show the user use the errorLabel widget like so
