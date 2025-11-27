@@ -37,6 +37,8 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
     # Music by Gunner Kline
     pongMusic1 = pygame.mixer.Sound("./assets/sounds/pongMusic1.mp3")
     pongMusic2 = pygame.mixer.Sound("./assets/sounds/pongMusic2.mp3")
+    pongMusic3 = pygame.mixer.Sound("./assets/sounds/pongMusic3.mp3")
+    pongMusic3.set_volume(0.5)
 
     pongTrack = {
         pongMusic1,
@@ -90,7 +92,8 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         pongSong = random.choice(list(pongTrack))
         pongSong.play(loops=-1)
     else:
-        pongSong
+        pongSong = pongMusic3
+        pongSong.play(loops=-1)
 
     while True:
         # Wiping the screen
