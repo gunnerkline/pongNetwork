@@ -16,13 +16,12 @@ pongServer_Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # IPv4. UDP
 
 pongServer_Socket.bind((HOST, PORT))
 
+# To hold all clients, all spectators, and sort out buffers from incoming client configurations
 clients = []
 spectators = []
 buffers = {}
 
-
-global_sync = 0
-
+# To ensure only two clients can be players
 players = {
     "left": None,
     "right": None
@@ -38,9 +37,6 @@ while True:
     if ADDR not in clients:
         clients.append(ADDR)
         buffers[ADDR] = ""
-        print(f"[NEW CONNECTION] {ADDR}")
-
-        index = clients.index(ADDR)
 
         if players["left"] is None:
             players["left"] = ADDR
@@ -58,15 +54,19 @@ while True:
         "pad": pad
         }
 
-        pongServer_Socket.sendto(json.dumps(config).encode(), ADDR)
-        continue
+        try:
+            pongServer_Socket.sendto(json.dumps(config).encode(), ADDR)
+            continue
+        except:
+            continue
 
-    # Receive Client buffer containing paddle, ball location, and score
+    # Receive Client buffer containing paddle location, ball location, and score
     try:
         buffers[ADDR] += DATA.decode()
     except:
         continue
 
+    # Reconstruct message to avoid JSONDecodeError errors.
     while "\n" in buffers[ADDR]:
         msg, buffers[ADDR] = buffers[ADDR].split("\n", 1)
         msg = msg.strip()
@@ -78,7 +78,7 @@ while True:
         except json.JSONDecodeError:
             continue
 
-        # ---- Disconnect handling ----
+        # Disconnect Handling:
         if "disconnect" in clientConfig:
             print(f"[DISCONNECT FROM] {ADDR}")
 
@@ -97,14 +97,18 @@ while True:
             break  # exit the while "\n" loop
 
         # Determine opponent and spectators
-        # The first player to connect is considered "Authoritative," and sends its ball location and score to all other clients.
+        # The first player to connect is considered "Authoritative," and sends 
+        # its ball location and score to all other clients.
 
         recipients = []
+
         if ADDR == players["left"]:
             if players["right"]:
                 recipients.append(players["right"])
+
         elif ADDR == players["right"]:
             if players["left"]:
+                # Non-authoritative players will only send through their paddle location
                 recipients.append(players["left"])
 
                 clientConfig.pop("ballCoords", None)
@@ -113,6 +117,7 @@ while True:
 
         recipients.extend(spectators)
 
+        # Send to all clients
         for r in recipients:
             pongServer_Socket.sendto((json.dumps(clientConfig) + "\n").encode(), r)
 

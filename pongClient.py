@@ -1,9 +1,9 @@
 # =================================================================================================
-# Contributing Authors:	    <Anyone who touched the code>
-# Email Addresses:          <Your uky.edu email addresses>
-# Date:                     <The date the file was last edited>
-# Purpose:                  <How this file contributes to the project>
-# Misc:                     <Not Required.  Anything else you might want to include>
+# Contributing Authors:	    Gunner Kline, Rebecca Mukeba, Nick Stone
+# Email Addresses:          gkl230@uky.edu, rnmu228@uky.edu, nsst231@uky.edu 
+# Date:                     11/26/2025
+# Purpose:                  Allow conversation between client, server, and other clients. Handle game operations, sending and receiving client configurations, synchronizations, spectators, and end-of-game design.
+# Misc:                     
 # =================================================================================================
 
 import pygame
@@ -79,13 +79,18 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 
     sync = 0
     last_received_sync = -1
+
     recv_buffer = ""
     client.setblocking(False)
+
     gameOver = False
 
     # Play music
-    pongSong = random.choice(list(pongTrack))
-    pongSong.play(loops=-1)
+    if playerPaddleObj:
+        pongSong = random.choice(list(pongTrack))
+        pongSong.play(loops=-1)
+    else:
+        pongSong
 
     while True:
         # Wiping the screen
@@ -132,6 +137,8 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # where the ball is and the current score.
         # Feel free to change when the score is updated to suit your needs/requirements
 
+                     
+        # For players only, send essential data to the server for redistribution to other player and spectators
         if playerPaddleObj:
             config = {
                 "padID"             : playerPaddle,
@@ -141,10 +148,10 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                 "currentRightScore" : rScore,
                 "sync"              : sync
             }
-        try:
-            client.sendto((json.dumps(config) +"\n").encode(),pongServer_addr)
-        except:
-            pass
+            try:
+                client.sendto((json.dumps(config) +"\n").encode(),pongServer_addr)
+            except:
+                pass
 
         # =========================================================================================
 
@@ -178,8 +185,8 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                 "Q to quit"
             ]
 
-            line_height = winFont.get_linesize()  # Gives the height of one line
-
+            # In place of pygame not being able to utilize `\n`'s
+            line_height = winFont.get_linesize()
             for i, line in enumerate(playAgainLines):
                 paTextSurface = winFont.render(line, False, WHITE)
                 paTextRect = paTextSurface.get_rect()
@@ -248,6 +255,8 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 
         # Inside the receive section
         latest_msg = None
+
+        # Receive opposing player's data and put in a buffer for separating
         while True:
             try:
                 packet, _ = client.recvfrom(4096)
@@ -260,13 +269,15 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                 print("Server Disconnect")
                 return
 
+        # Framed Message Reconstruction to avoid parser or JSONDecodeError errors
         if "\n" in recv_buffer:
             parts = recv_buffer.split("\n")
-            recv_buffer = parts.pop()  # leftover partial message
+            recv_buffer = parts.pop()  # Add partial messages
             for p in parts:
                 p = p.strip()
                 if p:
                     latest_msg = p
+
 
         if latest_msg:
             try:
@@ -274,12 +285,12 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             except json.JSONDecodeError:
                 latest_msg = None
             else:
-                # Only accept newer syncs
+                # If an opponent's sync is newer than a players, update with their information.
                 incoming_sync = opconfig.get("sync", -1)
                 if incoming_sync > last_received_sync:
                     last_received_sync = incoming_sync
 
-                        # Ball update
+                    # Ball update
                     if "ballCoords" in opconfig:
                         ball.rect.topleft = opconfig["ballCoords"]
 
@@ -293,18 +304,16 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                     if "paddleCoords" in opconfig and "padID" in opconfig:
                         padAssigned = opconfig["padID"]
 
-                        # If this pad is NOT your own, update the opponent
+                        # If not a spectator nor a paddle that is the players, update opponent's paddle location
                         if playerPaddle != "spectator":
                             if padAssigned != playerPaddle:
                                 opponentPaddleObj.rect.topleft = opconfig["paddleCoords"]
                         else:
-                            # spectator updates both
+                            # If a spectator, update both paddles
                             if padAssigned == "left":
                                 leftPaddle.rect.topleft = opconfig["paddleCoords"]
                             elif padAssigned == "right":
                                 rightPaddle.rect.topleft = opconfig["paddleCoords"]
-
-                print(f"Local sync: {sync}, Last received sync: {last_received_sync}")
 
         # =========================================================================================
 
@@ -331,21 +340,23 @@ def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
 
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
     port = int(port);
-    pongServer_addr = (ip, port)
+    pongServer_addr = (ip, port) # Important for usability with UDP
 
-    screenWidth = None
+    screenWidth  = None
     screenHeight = None
-    pad = None
+    pad          = None
 
-    print("Connecting to:", pongServer_addr)
+
+    # Utilize errorLabel to handle error within application.
     try:
         client.sendto(json.dumps({"join": True}).encode(), pongServer_addr)
-        # receive initial config
-        data, _ = client.recvfrom(4096)
-        server_info = json.loads(data.decode())
-        screenWidth = server_info["screenWidth"]
+
+        # Receive initial configuration from server
+        data, _      = client.recvfrom(4096)
+        server_info  = json.loads(data.decode())
+        screenWidth  = server_info["screenWidth"]
         screenHeight = server_info["screenHeight"]
-        pad         = server_info["pad"]
+        pad          = server_info["pad"]
     except socket.timeout:
         errorLabel.config(text="Error: Connection timeout. Server may be unreachable.")
         errorLabel.update()
@@ -372,6 +383,7 @@ def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
         client.close()
         return
 
+    # Further exceptions
     if pad not in ["left", "right", "spectator"]:
             errorLabel.config(text="Error: Invalid paddle assignment from server.")
             errorLabel.update()
