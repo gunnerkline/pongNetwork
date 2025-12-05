@@ -9,7 +9,7 @@
 import socket
 import json
 
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = 62222
 
 pongServer_Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # IPv4. UDP as this is intended for a game.
@@ -80,7 +80,6 @@ while True:
 
         # Disconnect Handling:
         if "disconnect" in clientConfig:
-            print(f"[DISCONNECT FROM] {ADDR}")
 
             for key in ["left", "right"]:
                 if players[key] == ADDR:
