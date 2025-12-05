@@ -3,7 +3,7 @@
 # Email Addresses:          gkl230@uky.edu, 
 # Date:                     11/26/2025
 # Purpose:                  Handle receiving and sending of crucial data i.e. paddle and ball locations across multiple clients. Discern between players and spectators.
-# Misc:                     
+# Misc:                     Run ipconfig to show what IP to input in the host tab
 # =================================================================================================
 
 import socket
